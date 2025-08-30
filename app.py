@@ -23,6 +23,16 @@ import msal
 
 # ---------- Page ----------
 st.set_page_config(page_title="Kandor Schedulify", page_icon="🗓️", layout="wide")
+EXTRA_CSS = """
+<style>
+/* Add padding so your hero/topbar clears the Streamlit Cloud header */
+.block-container {
+    padding-top: 4rem !important;
+}
+</style>
+"""
+st.markdown(EXTRA_CSS, unsafe_allow_html=True)
+
 
 # ---------- ENV ----------
 load_dotenv()
