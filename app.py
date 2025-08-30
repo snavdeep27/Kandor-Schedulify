@@ -324,11 +324,25 @@ div[data-testid="stVerticalBlock"] .stButton > button { font-weight: 700 !import
   font-family: ui-monospace, Menlo, monospace;
   font-size:14px; color:#1f2544;
 }
-.link-card button {
-  padding:8px 14px; border-radius:999px; border:1px solid #cbd1ff;
-  background:#fff; cursor:pointer; font-weight:700;
+..link-card button{
+  padding:10px 16px;
+  border-radius:999px;
+  border:none;
+  color:#fff;
+  font-weight:800;
+  letter-spacing:.2px;
+  cursor:pointer;
+  background:linear-gradient(90deg,#6366f1 0%, #a855f7 100%); /* indigo → fuchsia */
+  box-shadow:0 8px 18px rgba(99,102,241,.25);
+  transition:transform .08s ease, box-shadow .15s ease, filter .15s ease;
 }
-.link-card button:hover { border-color:#8e96ff; box-shadow:0 6px 16px rgba(80,90,230,.18); }
+.link-card button:hover{
+  filter:brightness(1.05);
+  box-shadow:0 10px 22px rgba(99,102,241,.32);
+}
+.link-card button:active{
+  transform:translateY(1px) scale(.99);
+}
 </style>
 """, unsafe_allow_html=True)
 
