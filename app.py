@@ -306,6 +306,32 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+HOWTO_CSS = """
+<style>
+.howto-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap:16px;
+  margin-top:18px;
+}
+.howto-card{
+  background:#ffffff;
+  border:1px solid rgba(0,0,0,.06);
+  border-radius:14px;
+  padding:14px 16px;
+  box-shadow:0 4px 14px rgba(0,0,0,.04);
+}
+.howto-card h4{
+  margin:.2rem 0 .25rem;
+  font-size:1rem;
+}
+.howto-emoji{
+  font-size:22px; margin-right:8px;
+}
+</style>
+"""
+st.markdown(HOWTO_CSS, unsafe_allow_html=True)
+
 # ---------- Header ----------
 def topbar():
     c1, c2 = st.columns([7, 5])
@@ -326,20 +352,60 @@ def topbar():
 # ---------- Landing ----------
 def landing():
     topbar()
+
+    # Hero
     st.markdown(
-        """<div style="background: linear-gradient(180deg, #eef3ff 0%, #f6f8ff 100%); border-radius: 22px;
-        padding: 32px 28px; text-align:center; margin-bottom: 20px; border: 1px solid rgba(99,102,241,.08);">
-        <h3>Your Personal Calendly Clone by Kandor</h3>
-        <p>Sign in with your Outlook account, set your availability, and share a simple booking link.</p>
-        </div>""",
+        """
+        <div class="hero">
+          <h3>Your Personal Calendly Clone by Kandor</h3>
+          <p>Sign in with your Outlook account, set your availability, and share a simple booking link.</p>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
-    a, b = st.columns(2)
-    with a:
-        if st.button("Sign in with Outlook", type="primary", use_container_width=True):
-            st.query_params["page"] = "signin"; st.rerun()
-    with b:
-        st.link_button("View Booking (demo)", url=f"{BASE_URL}/?page=book", use_container_width=True)
+
+    # Single primary CTA
+    if st.button("Sign in with Outlook", type="primary", use_container_width=True):
+        st.query_params["page"] = "signin"
+        st.rerun()
+
+    # How it works
+    st.markdown("#### How to use Kandor Schedulify")
+    st.markdown(
+        """
+        <div class="howto-grid">
+          <div class="howto-card">
+            <div><span class="howto-emoji">🔐</span><b>Sign in with Outlook</b></div>
+            <p>Connect securely via Microsoft and grant <i>Calendars.ReadWrite</i> & <i>Mail.Send</i>.</p>
+          </div>
+          <div class="howto-card">
+            <div><span class="howto-emoji">⚙️</span><b>Configure settings</b></div>
+            <p>Set meeting duration, buffer time, working days/hours, time zone, and your Zoom/Meet link on the Dashboard.</p>
+          </div>
+          <div class="howto-card">
+            <div><span class="howto-emoji">🔗</span><b>Share your booking link</b></div>
+            <p>Copy the personal link from the Dashboard and send it to clients.</p>
+          </div>
+          <div class="howto-card">
+            <div><span class="howto-emoji">📅</span><b>Clients pick a slot</b></div>
+            <p>We show <b>only open</b> times from your Outlook calendar in their time zone—no double booking.</p>
+          </div>
+          <div class="howto-card">
+            <div><span class="howto-emoji">✉️</span><b>Automatic invites</b></div>
+            <p>Both attendees receive a calendar invite. You also get a confirmation email with the guest’s details.</p>
+          </div>
+          <div class="howto-card">
+            <div><span class="howto-emoji">🛠️</span><b>Manage in Outlook</b></div>
+            <p>Reschedule/cancel directly in Outlook. Update your settings anytime in the Dashboard.</p>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+
+
 
 # ---------- Dashboard ----------
 def dashboard():
