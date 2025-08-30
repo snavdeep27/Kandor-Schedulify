@@ -267,7 +267,7 @@ def build_slots(day: dt.date, work_start: dt.time, work_end: dt.time,
         t += step
     return result
 
-# ---------- CSS ----------
+# ---------- CSS (colorful calendar & buttons) ----------
 st.markdown("""
 <style>
 .block-container { padding-top: 1.1rem; padding-bottom: 2rem; }
@@ -275,34 +275,60 @@ st.markdown("""
 .topbar-left { display:flex; align-items:center; gap:10px; }
 .appname { font-weight:800; letter-spacing:-0.02em; font-size:20px; }
 
+/* Global button style (soft gradient pills) */
+.stButton > button {
+  border-radius: 999px !important;
+  border: 1px solid #cfd4ff !important;
+  background: linear-gradient(180deg,#ffffff 0%,#f4f6ff 100%) !important;
+  color: #1f2544 !important;
+  box-shadow: 0 2px 6px rgba(80, 90, 230, .06) !important;
+}
+.stButton > button:hover {
+  border-color: #8e96ff !important;
+  box-shadow: 0 6px 16px rgba(80, 90, 230, .18) !important;
+}
+
 /* Calendar */
 .cal-header { display:flex; align-items:center; justify-content:space-between; margin: 6px 0 10px 0; }
 .cal-title { font-weight: 700; }
 .cal-grid { display:grid; grid-template-columns: repeat(7, minmax(36px,1fr)); gap:10px; }
 .cal-dow { text-align:center; font-size: 12px; color:#6b7280; }
-.cal-day { text-align:center; padding:10px 0; border-radius: 999px; border:1px solid #e5e7eb; }
-.cal-day.today { border-color:#9aa2ff; }
-.cal-day.sel { background:#4f46e5; color:white; border-color:#4f46e5; }
-.cal-day.dim { color:#a3a3a3; border-color:#f1f5f9; }
+.cal-day {
+  text-align:center; padding:12px 0; border-radius: 999px;
+  border:1px solid #e6e9ff; background: #fbfcff; color:#3a3f6b;
+}
+.cal-day.today {
+  background: linear-gradient(180deg,#eef3ff 0%, #f5f7ff 100%);
+  border-color:#b9c2ff;
+}
+.cal-day.sel {
+  background: linear-gradient(180deg,#6a5cff 0%, #8c7bff 100%);
+  color:white; border-color:#6a5cff;
+  box-shadow: 0 6px 16px rgba(106,92,255,.28);
+}
+.cal-day.dim { color:#a3a3a3; border-color:#f1f5f9; background:#fafbff; opacity:.65; }
 .cal-nav { min-width:44px; }
-@media (max-width: 640px) { .cal-grid { gap:6px; } }
-.slotbox { max-height: 520px; overflow-y: auto; padding-right: 6px; }
+
+/* Time-slot buttons (right column) inherit global pill styling; bump font-weight a bit */
+div[data-testid="stVerticalBlock"] .stButton > button { font-weight: 700 !important; }
 
 /* Booking link pill */
 .link-card {
-  display:flex; align-items:center; gap:10px; padding:10px 12px;
-  border-radius:999px; border:1px solid #d6d9ff;
-  background:linear-gradient(135deg,#eef3ff 0%, #f7f9ff 100%);
-  box-shadow:0 6px 18px rgba(16,24,40,.06);
+  display:flex; align-items:center; gap:10px; padding:12px 14px;
+  border-radius:999px; border:1px solid #cfd4ff;
+  background:linear-gradient(135deg,#edf1ff 0%, #f8faff 100%);
+  box-shadow:0 8px 22px rgba(16,24,40,.08);
 }
 .link-card input {
   border:none; background:transparent; outline:none; width:100%;
   font-family: ui-monospace, Menlo, monospace;
-  font-size:14px;
+  font-size:14px; color:#1f2544;
 }
-.copyRow button, .link-card button {
-  padding:8px 14px; border-radius:999px; border:1px solid #cbd1ff; background:#fff; cursor:pointer; font-weight:600;
+.link-card button {
+  padding:8px 14px; border-radius:999px; border:1px solid #cbd1ff;
+  background:#fff; cursor:pointer; font-weight:700;
 }
+.link-card button:hover { border-color:#8e96ff; box-shadow:0 6px 16px rgba(80,90,230,.18); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -356,7 +382,6 @@ def landing():
         """,
         unsafe_allow_html=True,
     )
-
     if st.button("Sign in with Outlook", type="primary", use_container_width=True):
         st.query_params["page"] = "signin"
         st.rerun()
