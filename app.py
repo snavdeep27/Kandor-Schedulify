@@ -670,10 +670,43 @@ def booking_page():
 def signin_page():
     topbar()
     st.markdown("### Sign in with Outlook")
-    st.write("Connecting to Microsoft…")
+    st.write("You’ll be redirected to Microsoft to sign in.")
+
     auth_url = create_auth_url()
-    st.markdown(f'<meta http-equiv="refresh" content="0; url={auth_url}">', unsafe_allow_html=True)
-    st.link_button("Continue with Microsoft", url=auth_url, use_container_width=True)
+
+    # Try to navigate the TOP window (not the Streamlit iframe).
+    st.markdown(
+        f"""
+        <script>
+          (function() {{
+            const url = "{auth_url}";
+            try {{
+              // If we are inside an iframe (Firefox), escalate to the top window.
+              if (window.top && window.top !== window.self) {{
+                window.top.location.href = url;
+              }} else {{
+                // Not in an iframe: normal navigation.
+                window.location.assign(url);
+              }}
+            }} catch (e) {{
+              // As a fallback (e.g., popup blockers), do nothing; user can click the button below.
+              console.warn("Auto-redirect suppressed:", e);
+            }}
+          }})();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Visible fallback for browsers/pop-up blockers
+    st.markdown(
+        f'<a href="{auth_url}" target="_blank" rel="noopener" '
+        'style="display:inline-block;padding:10px 16px;border-radius:8px;'
+        'background:#4f46e5;color:#fff;text-decoration:none;font-weight:700;">'
+        'Continue with Microsoft</a>',
+        unsafe_allow_html=True,
+    )
+
 
 # ---------- Router ----------
 def main():
