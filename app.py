@@ -26,13 +26,10 @@ st.set_page_config(page_title="Kandor Schedulify", page_icon="🗓️", layout="
 EXTRA_CSS = """
 <style>
 /* Add padding so your hero/topbar clears the Streamlit Cloud header */
-.block-container {
-    padding-top: 4rem !important;
-}
+.block-container { padding-top: 4rem !important; }
 </style>
 """
 st.markdown(EXTRA_CSS, unsafe_allow_html=True)
-
 
 # ---------- ENV ----------
 load_dotenv()
@@ -149,7 +146,6 @@ def finish_auth_redirect():
             "oid": oid, "email": email, "name": name, "slug": slug,
             "zoom_link": "",
             "meeting_duration": 30,
-            "buffer_minutes": 15,
             "available_days": ["Monday","Tuesday","Wednesday","Thursday","Friday"],
             "start_time": "09:00", "end_time": "17:00",
             "timezone": "Asia/Kolkata",
@@ -254,30 +250,19 @@ def graph_send_mail(token: str, to_addr: str, subject: str, html_body: str, tzna
     r = requests.post(url, headers=graph_headers(token, tzname), json=payload, timeout=20)
     return r.status_code in (202, 200)
 
-# ---------- Slot math ----------
-def expand_busy_windows(busy: List[Tuple[dt.time, dt.time]], buffer_min: int) -> List[Tuple[dt.time, dt.time]]:
-    if buffer_min <= 0: return busy
-    delta = dt.timedelta(minutes=buffer_min); out = []
-    for s, e in busy:
-        d = dt.date.today()
-        sdt = dt.datetime.combine(d, s) - delta
-        edt = dt.datetime.combine(d, e) + delta
-        out.append((sdt.time(), edt.time()))
-    return out
-
+# ---------- Slot math (no buffer) ----------
 def overlap(a_start: dt.time, a_end: dt.time, b_start: dt.time, b_end: dt.time) -> bool:
     return max(a_start, b_start) < min(a_end, b_end)
 
 def build_slots(day: dt.date, work_start: dt.time, work_end: dt.time,
-                meeting_minutes: int, busy: List[Tuple[dt.time, dt.time]], buffer_min: int) -> List[dt.time]:
-    busy2 = expand_busy_windows(busy, buffer_min)
+                meeting_minutes: int, busy: List[Tuple[dt.time, dt.time]]) -> List[dt.time]:
     step = dt.timedelta(minutes=meeting_minutes)
     t = dt.datetime.combine(day, work_start)
     end = dt.datetime.combine(day, work_end)
     result = []
     while t + step <= end:
         s = t.time(); e = (t + step).time()
-        if not any(overlap(s, e, bs, be) for bs, be in busy2):
+        if not any(overlap(s, e, bs, be) for bs, be in busy):
             result.append(s)
         t += step
     return result
@@ -289,20 +274,35 @@ st.markdown("""
 .topbar { display:flex; align-items:center; justify-content:space-between; padding:8px 6px 0 6px; }
 .topbar-left { display:flex; align-items:center; gap:10px; }
 .appname { font-weight:800; letter-spacing:-0.02em; font-size:20px; }
+
+/* Calendar */
 .cal-header { display:flex; align-items:center; justify-content:space-between; margin: 6px 0 10px 0; }
 .cal-title { font-weight: 700; }
 .cal-grid { display:grid; grid-template-columns: repeat(7, minmax(36px,1fr)); gap:10px; }
 .cal-dow { text-align:center; font-size: 12px; color:#6b7280; }
 .cal-day { text-align:center; padding:10px 0; border-radius: 999px; border:1px solid #e5e7eb; }
-.cal-day.btn { cursor:pointer; border:1px solid #c7ccff; }
 .cal-day.today { border-color:#9aa2ff; }
 .cal-day.sel { background:#4f46e5; color:white; border-color:#4f46e5; }
 .cal-day.dim { color:#a3a3a3; border-color:#f1f5f9; }
 .cal-nav { min-width:44px; }
 @media (max-width: 640px) { .cal-grid { gap:6px; } }
 .slotbox { max-height: 520px; overflow-y: auto; padding-right: 6px; }
-.copyRow { display:flex; gap:8px; align-items:center; }
-.copyRow input { flex: 1 1 auto; }
+
+/* Booking link pill */
+.link-card {
+  display:flex; align-items:center; gap:10px; padding:10px 12px;
+  border-radius:999px; border:1px solid #d6d9ff;
+  background:linear-gradient(135deg,#eef3ff 0%, #f7f9ff 100%);
+  box-shadow:0 6px 18px rgba(16,24,40,.06);
+}
+.link-card input {
+  border:none; background:transparent; outline:none; width:100%;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size:14px;
+}
+.copyRow button, .link-card button {
+  padding:8px 14px; border-radius:999px; border:1px solid #cbd1ff; background:#fff; cursor:pointer; font-weight:600;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -321,13 +321,8 @@ HOWTO_CSS = """
   padding:14px 16px;
   box-shadow:0 4px 14px rgba(0,0,0,.04);
 }
-.howto-card h4{
-  margin:.2rem 0 .25rem;
-  font-size:1rem;
-}
-.howto-emoji{
-  font-size:22px; margin-right:8px;
-}
+.howto-card h4{ margin:.2rem 0 .25rem; font-size:1rem; }
+.howto-emoji{ font-size:22px; margin-right:8px; }
 </style>
 """
 st.markdown(HOWTO_CSS, unsafe_allow_html=True)
@@ -352,8 +347,6 @@ def topbar():
 # ---------- Landing ----------
 def landing():
     topbar()
-
-    # Hero
     st.markdown(
         """
         <div class="hero">
@@ -364,12 +357,10 @@ def landing():
         unsafe_allow_html=True,
     )
 
-    # Single primary CTA
     if st.button("Sign in with Outlook", type="primary", use_container_width=True):
         st.query_params["page"] = "signin"
         st.rerun()
 
-    # How it works
     st.markdown("#### How to use Kandor Schedulify")
     st.markdown(
         """
@@ -380,7 +371,7 @@ def landing():
           </div>
           <div class="howto-card">
             <div><span class="howto-emoji">⚙️</span><b>Configure settings</b></div>
-            <p>Set meeting duration, buffer time, working days/hours, time zone, and your Zoom/Meet link on the Dashboard.</p>
+            <p>Set meeting duration, working days/hours, time zone, and your video link on the Dashboard.</p>
           </div>
           <div class="howto-card">
             <div><span class="howto-emoji">🔗</span><b>Share your booking link</b></div>
@@ -402,10 +393,6 @@ def landing():
         """,
         unsafe_allow_html=True,
     )
-
-
-
-
 
 # ---------- Dashboard ----------
 def dashboard():
@@ -435,7 +422,7 @@ def dashboard():
         slug = user.get("slug", "unknown")
         booking_url = f"{BASE_URL}/?page=book&user={slug}"
         st_html(f"""
-            <div class="copyRow">
+            <div class="link-card">
               <input id="k-copy-input" value="{booking_url}" readonly />
               <button id="k-copy-btn">Copy</button>
             </div>
@@ -444,22 +431,20 @@ def dashboard():
               const inp = document.getElementById('k-copy-input');
               if (btn && inp) {{
                 btn.addEventListener('click', () => {{
-                  inp.select();
-                  inp.setSelectionRange(0, 99999);
+                  inp.select(); inp.setSelectionRange(0, 99999);
                   try {{ navigator.clipboard.writeText(inp.value); }} catch (e) {{
                     document.execCommand('copy');
                   }}
                 }});
               }}
             </script>
-        """, height=60)
-        st.caption("For production, change BASE_URL in .env and add the same redirect URI in Azure.")
+        """, height=68)
 
     with col3:
         st.markdown("##### Quick Stats")
-        mdur = user.get("meeting_duration", 30); bmin = user.get("buffer_minutes", 15); wdays = len(user.get("available_days", []))
+        mdur = user.get("meeting_duration", 30)
+        wdays = len(user.get("available_days", []))
         st.write(f"**Meeting Duration:** {mdur} min")
-        st.write(f"**Buffer Time:** {bmin} min")
         st.write(f"**Working Days:** {wdays} days")
 
     st.divider()
@@ -468,13 +453,10 @@ def dashboard():
         st.markdown("#### Meeting Settings")
         c1, c2 = st.columns(2)
         with c1:
-            zoom = st.text_input("Zoom Meeting Link", value=user.get("zoom_link", ""))
+            video_link = st.text_input("Zoom / Google Meet / Cisco Link", value=user.get("zoom_link", ""))
         with c2:
             dur = st.number_input("Meeting Duration (minutes)", min_value=15, max_value=180,
                                   value=int(user.get("meeting_duration", 30)), step=15)
-
-        buffer_minutes = st.number_input("Buffer Time (minutes)", min_value=0, max_value=120,
-                                         value=int(user.get("buffer_minutes", 15)), step=5)
 
         st.markdown("#### Working Hours & Time Zone")
         days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
@@ -502,9 +484,8 @@ def dashboard():
 
         if st.form_submit_button("Save Settings", type="primary"):
             users_col().update_one({"oid": user["oid"]}, {"$set": {
-                "zoom_link": zoom,
+                "zoom_link": video_link,
                 "meeting_duration": int(dur),
-                "buffer_minutes": int(buffer_minutes),
                 "available_days": avail_days,
                 "start_time": start_time.strftime("%H:%M"),
                 "end_time": end_time.strftime("%H:%M"),
@@ -642,11 +623,10 @@ def booking_page():
             continue
 
     meet_min = int(user.get("meeting_duration", 30))
-    buf_min = int(user.get("buffer_minutes", 15))
     work_start = dt.datetime.strptime(user.get("start_time", "09:00"), "%H:%M").time()
     work_end   = dt.datetime.strptime(user.get("end_time", "17:00"), "%H:%M").time()
 
-    slots = build_slots(selected_date, work_start, work_end, meet_min, busy, buf_min)
+    slots = build_slots(selected_date, work_start, work_end, meet_min, busy)
 
     now_local = dt.datetime.now(tz)
     if selected_date == now_local.date():
@@ -710,7 +690,7 @@ def booking_page():
                       <li><b>Guest:</b> {name} &lt;{email.strip()}&gt;</li>
                       <li><b>When:</b> {start_dt_local.strftime("%A, %B %d %Y %I:%M %p")} ({tzname})</li>
                       <li><b>Duration:</b> {meet_min} minutes</li>
-                      <li><b>Zoom:</b> {user.get('zoom_link','N/A')}</li>
+                      <li><b>Video link:</b> {user.get('zoom_link','N/A')}</li>
                       {"<li><b>Agenda:</b> " + agenda.strip() + "</li>" if agenda.strip() else ""}
                     </ul>
                 """
@@ -729,7 +709,7 @@ def booking_page():
                           <li><b>Guest:</b> {name} &lt;{email.strip()}&gt;</li>
                           <li><b>When:</b> {human_time} ({tzname})</li>
                           <li><b>Duration:</b> {meet_min} minutes</li>
-                          <li><b>Zoom:</b> {user.get('zoom_link','N/A')}</li>
+                          <li><b>Video link:</b> {user.get('zoom_link','N/A')}</li>
                           {"<li><b>Agenda:</b> " + agenda.strip() + "</li>" if agenda.strip() else ""}
                         </ul>
                     """
@@ -757,15 +737,12 @@ def signin_page():
           (function() {{
             const url = "{auth_url}";
             try {{
-              // If we are inside an iframe (Firefox), escalate to the top window.
               if (window.top && window.top !== window.self) {{
                 window.top.location.href = url;
               }} else {{
-                // Not in an iframe: normal navigation.
                 window.location.assign(url);
               }}
             }} catch (e) {{
-              // As a fallback (e.g., popup blockers), do nothing; user can click the button below.
               console.warn("Auto-redirect suppressed:", e);
             }}
           }})();
@@ -782,7 +759,6 @@ def signin_page():
         'Continue with Microsoft</a>',
         unsafe_allow_html=True,
     )
-
 
 # ---------- Router ----------
 def main():
