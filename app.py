@@ -19,17 +19,20 @@ import msal
 # ---------- Page ----------
 st.set_page_config(page_title="Kandor Schedulify", page_icon="🗓️", layout="wide")
 
-# ---------- Global CSS (force light theme + mobile fixes) ----------
+# ---------- Global CSS (force light + mobile calendar fix) ----------
 st.markdown("""
 <style>
-/* ---- Force light mode everywhere --------------------------------------- */
 :root { color-scheme: only light; }
 html, body, .stApp { background:#ffffff !important; color:#111827 !important; }
 [data-testid="stHeader"], [data-testid="stToolbar"] { background:transparent !important; }
 .block-container { padding-top: 4rem !important; padding-bottom: 2rem !important; }
-h1, h2, h3, h4, h5, h6, p, label, span, small, strong, em { color:#111827 !important; }
+h1,h2,h3,h4,h5,h6,p,label,span,small,strong,em { color:#111827 !important; }
 
-/* ---- Inputs / Selects / Textareas always white ------------------------- */
+/* Topbar */
+.k-topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.k-topbar-left { display:flex; align-items:center; gap:10px; }
+
+/* Inputs white always */
 div[data-baseweb="input"],
 div[data-baseweb="select"],
 textarea,
@@ -45,7 +48,7 @@ textarea,
 div[data-baseweb="select"] * { color:#111827 !important; }
 div[data-baseweb="tag"] { background:#eef2ff !important; color:#111827 !important; }
 
-/* ---- Buttons (generic) -------------------------------------------------- */
+/* Generic buttons */
 .stButton > button {
   border-radius:999px !important;
   border:1px solid #cfd4ff !important;
@@ -53,12 +56,9 @@ div[data-baseweb="tag"] { background:#eef2ff !important; color:#111827 !importan
   color:#1f2544 !important;
   box-shadow:0 2px 6px rgba(80,90,230,.06) !important;
 }
-.stButton > button:hover {
-  border-color:#8e96ff !important;
-  box-shadow:0 6px 16px rgba(80,90,230,.18) !important;
-}
+.stButton > button:hover { border-color:#8e96ff !important; box-shadow:0 6px 16px rgba(80,90,230,.18) !important; }
 
-/* ---- Copy chip (dashboard) --------------------------------------------- */
+/* Copy chip */
 .link-card{
   display:flex; align-items:center; gap:10px; padding:12px 14px;
   border-radius:999px; border:1px solid #cfd4ff;
@@ -77,33 +77,43 @@ div[data-baseweb="tag"] { background:#eef2ff !important; color:#111827 !importan
 }
 .link-card button:hover{ filter:brightness(1.05); }
 
-/* ---- Calendar header + grid -------------------------------------------- */
-.cal-head { display:flex; align-items:center; justify-content:center; gap:10px; margin:6px 0 2px; }
-.cal-nav { width:38px; height:38px; display:flex; align-items:center; justify-content:center;
-  border:1px solid #d9defe; border-radius:999px; background:#fff; cursor:pointer; user-select:none;
-  box-shadow:0 2px 6px rgba(80,90,230,.06);
-}
-.cal-nav:active{ transform:translateY(1px); }
-.cal-title { font-weight:700; letter-spacing:.2px; }
+/* ------- Calendar -------- */
+.kcal { margin-top:.25rem; }
+.kcal-head { display:flex; align-items:center; justify-content:center; gap:10px; margin:6px 0 2px; }
+.kcal-title { font-weight:700; letter-spacing:.2px; }
+.kcal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:12px; }
+.kcal-dow  { text-align:center; font-size:12px; color:#6b7280 !important; }
 
-.cal-grid { display:grid; grid-template-columns: repeat(7, minmax(36px,1fr)); gap:12px; }
-.cal-dow  { text-align:center; font-size:12px; color:#6b7280 !important; }
-.cal-day  {
-  text-align:center; padding:12px 0; border-radius:999px;
+/* Calendar pills */
+.kcal .pill {
+  width:44px; height:44px; line-height:44px;
+  border-radius:9999px; display:inline-block; text-align:center;
   border:1px solid #e6e9ff; background:#fbfcff; color:#3a3f6b !important;
 }
-.cal-day.today { background:linear-gradient(180deg,#eef3ff 0%,#f5f7ff 100%); border-color:#b9c2ff; }
-.cal-day.sel   { background:linear-gradient(180deg,#6a5cff 0%,#8c7bff 100%); color:#fff !important; border-color:#6a5cff; box-shadow:0 6px 16px rgba(106,92,255,.28); }
-.cal-day.dim   { color:#9ca3af !important; border-color:#f1f5f9; background:#fafbff; opacity:.7; }
+.kcal .pill.today { background:linear-gradient(180deg,#eef3ff 0%,#f5f7ff 100%); border-color:#b9c2ff; }
+.kcal .pill.dim { color:#9ca3af !important; border-color:#f1f5f9; background:#fafbff; opacity:.7; }
+.kcal .pill.sel { background:linear-gradient(180deg,#6a5cff 0%,#8c7bff 100%); color:#fff !important; border-color:#6a5cff; box-shadow:0 6px 16px rgba(106,92,255,.28); }
 
-/* Tighten time slot buttons a bit on mobile */
-@media (max-width: 640px){
-  .cal-grid{ gap:8px; }
-  .cal-day{ padding:10px 0; }
+/* Streamlit buttons inside calendar -> pill size */
+.kcal .stButton { text-align:center; }
+.kcal .stButton > button {
+  width:44px !important; height:44px !important; min-width:44px;
+  padding:0 !important; border-radius:9999px !important; font-weight:600 !important;
 }
 
-/* ---- Forms area spacing on booking page -------------------------------- */
+/* Slightly larger on desktop */
+@media (min-width: 768px){
+  .kcal .pill, .kcal .stButton > button { width:48px !important; height:48px !important; line-height:48px; }
+  .kcal-grid { gap:14px; }
+}
+
+/* Booking form spacing */
 .booking-form h4{ margin-top:.5rem; }
+
+/* How-to cards */
+.howto-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-top:18px; }
+.howto-card{ background:#fff; border:1px solid rgba(0,0,0,.06); border-radius:14px; padding:14px 16px; box-shadow:0 4px 14px rgba(0,0,0,.04); }
+.howto-emoji{ font-size:22px; margin-right:8px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -208,7 +218,7 @@ def finish_auth_redirect():
     claims = result.get("id_token_claims", {}) or {}
     oid = claims.get("oid") or claims.get("sub")
     email = claims.get("preferred_username") or ""
-    name = claims.get("name") or (email.split("@")[0] if email else "User")
+    name = claims.get("name") or (email.split("@")[:1][0] if email else "User")
     if not oid:
         st.error("Missing Microsoft account ID (oid)."); return
 
@@ -285,8 +295,7 @@ def is_interval_free(token: str, start_local: dt.datetime, end_local: dt.datetim
     end_utc   = end_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
     events = graph_day_view(token, start_utc, end_utc, tzname)
     for ev in events:
-        if ev.get("isCancelled"):
-            continue
+        if ev.get("isCancelled"): continue
         show_as = (ev.get("showAs") or "busy").lower()
         if show_as in {"busy", "oof", "workingelsewhere", "tentative"}:
             return False
@@ -328,27 +337,45 @@ def build_slots(day: dt.date, work_start: dt.time, work_end: dt.time,
 
 # ---------- Header ----------
 def topbar():
-    c1, c2 = st.columns([7, 5])
-    with c1:
-        if os.path.exists(LOGO_PATH):
-            st.image(LOGO_PATH, width=34)
+    st.markdown('<div class="k-topbar">', unsafe_allow_html=True)
+    left, right = st.columns([10,2])
+    with left:
+        st.markdown('<div class="k-topbar-left">', unsafe_allow_html=True)
+        if os.path.exists(LOGO_PATH): st.image(LOGO_PATH, width=34)
         st.markdown("### Kandor Schedulify")
-    with c2:
-        _, right = st.columns([5,1])
-        with right:
-            if "oid" in st.session_state:
-                if st.button("Sign out"):
-                    st.session_state.pop("oid", None)
-                    st.success("Signed out."); time.sleep(0.3)
-                    st.query_params.clear(); st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    with right:
+        if "oid" in st.session_state:
+            if st.button("Sign out"):
+                st.session_state.pop("oid", None)
+                st.success("Signed out."); time.sleep(0.3)
+                st.query_params.clear(); st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------- Landing ----------
+# ---------- Landing (restored) ----------
 def landing():
     topbar()
     st.markdown("#### Your Personal Calendly Clone by Kandor")
     st.write("Sign in with your Outlook account, set your availability, and share a simple booking link.")
     if st.button("Sign in with Outlook", use_container_width=True):
         st.query_params["page"] = "signin"; st.rerun()
+
+    st.markdown("""
+    <div class="howto-grid">
+      <div class="howto-card"><div><span class="howto-emoji">🔐</span><b>Sign in with Outlook</b></div>
+        <p>Connect securely via Microsoft and grant <i>Calendars.ReadWrite</i> & <i>Mail.Send</i>.</p></div>
+      <div class="howto-card"><div><span class="howto-emoji">⚙️</span><b>Configure settings</b></div>
+        <p>Set duration, working days/hours, time zone, and your video link on the Dashboard.</p></div>
+      <div class="howto-card"><div><span class="howto-emoji">🔗</span><b>Share your booking link</b></div>
+        <p>Copy your personal link from the Dashboard.</p></div>
+      <div class="howto-card"><div><span class="howto-emoji">📅</span><b>Clients pick a slot</b></div>
+        <p>We show only open times from Outlook in their time zone—no double booking.</p></div>
+      <div class="howto-card"><div><span class="howto-emoji">✉️</span><b>Automatic invites</b></div>
+        <p>Both attendees receive calendar invites and you get a confirmation email.</p></div>
+      <div class="howto-card"><div><span class="howto-emoji">🛠️</span><b>Manage in Outlook</b></div>
+        <p>Reschedule/cancel in Outlook. Update settings anytime.</p></div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ---------- Dashboard ----------
 def dashboard():
@@ -415,12 +442,10 @@ def dashboard():
         avail_days = st.multiselect("Working Days", options=days, default=user.get("available_days", days[:5]))
 
         user_tz = user.get("timezone", "Asia/Kolkata")
-        common_tz = [
-            "UTC","Asia/Kolkata","Asia/Dubai","Asia/Singapore","Asia/Tokyo",
-            "Europe/London","Europe/Berlin","Europe/Paris",
-            "America/Los_Angeles","America/New_York","America/Chicago","America/Toronto",
-            "Australia/Sydney","Africa/Johannesburg",
-        ]
+        common_tz = ["UTC","Asia/Kolkata","Asia/Dubai","Asia/Singapore","Asia/Tokyo",
+                     "Europe/London","Europe/Berlin","Europe/Paris",
+                     "America/Los_Angeles","America/New_York","America/Chicago","America/Toronto",
+                     "Australia/Sydney","Africa/Johannesburg"]
         if user_tz not in common_tz: common_tz.insert(0, user_tz)
         tz = st.selectbox("Time Zone", options=common_tz, index=common_tz.index(user_tz))
 
@@ -443,7 +468,7 @@ def dashboard():
             }})
             st.success("Settings saved!"); st.rerun()
 
-# ---------- Month Calendar ----------
+# ---------- Calendar helpers ----------
 def _month_start(d: dt.date) -> dt.date: return d.replace(day=1)
 def _next_month(d: dt.date) -> dt.date: return dt.date(d.year+1,1,1) if d.month==12 else dt.date(d.year, d.month+1, 1)
 def _prev_month(d: dt.date) -> dt.date: return dt.date(d.year-1,12,1) if d.month==1 else dt.date(d.year, d.month-1, 1)
@@ -453,47 +478,56 @@ def calendar_widget(selected: dt.date, working_days: List[str]) -> dt.date:
         st.session_state["k_view_month"] = _month_start(selected if selected else dt.date.today())
     view = st.session_state["k_view_month"]
 
-    # Header (compact on mobile & desktop)
-    left, mid, right = st.columns([1,5,1])
-    with left:
-        if st.button("‹", key="kcal_prev"): st.session_state["k_view_month"] = _prev_month(view); st.rerun()
-    with mid:
-        st.markdown(f'<div class="cal-head"><div class="cal-title">{view.strftime("%B %Y")}</div></div>', unsafe_allow_html=True)
-    with right:
-        if st.button("›", key="kcal_next"): st.session_state["k_view_month"] = _next_month(view); st.rerun()
+    st.markdown('<div class="kcal">', unsafe_allow_html=True)
 
-    # Days of week header
-    st.markdown('<div class="cal-grid">' + ''.join([f'<div class="cal-dow">{d}</div>' for d in ["SUN","MON","TUE","WED","THU","FRI","SAT"]]) + '</div>', unsafe_allow_html=True)
+    # Header
+    c1,c2,c3 = st.columns([1,5,1])
+    with c1:
+        if st.button("‹", key="kcal_prev"):
+            st.session_state["k_view_month"] = _prev_month(view); st.rerun()
+    with c2:
+        st.markdown(f'<div class="kcal-head"><div class="kcal-title">{view.strftime("%B %Y")}</div></div>', unsafe_allow_html=True)
+    with c3:
+        if st.button("›", key="kcal_next"):
+            st.session_state["k_view_month"] = _next_month(view); st.rerun()
 
-    # Compute month grid
+    # DOW header
+    st.markdown('<div class="kcal-grid">' + ''.join([f'<div class="kcal-dow">{d}</div>' for d in ["SUN","MON","TUE","WED","THU","FRI","SAT"]]) + '</div>', unsafe_allow_html=True)
+
+    # Compute grid
     first_weekday, days_in_month = calendar.monthrange(view.year, view.month)
     lead_blanks = (first_weekday + 1) % 7
     today = dt.date.today()
-
-    # Render 6 weeks
     day = 1
+
+    # 6 weeks rows
     for _ in range(6):
         cols = st.columns(7)
         for ci in range(7):
             with cols[ci]:
                 if lead_blanks > 0:
                     lead_blanks -= 1
-                    st.markdown('<div class="cal-day dim">&nbsp;</div>', unsafe_allow_html=True)
+                    st.markdown('<span class="pill dim">&nbsp;</span>', unsafe_allow_html=True)
                 elif day <= days_in_month:
                     d = dt.date(view.year, view.month, day)
                     dayname = d.strftime("%A")
                     enabled = dayname in working_days and d >= today
-                    classes = ["cal-day"]
-                    if d == today: classes.append("today")
-                    if d == selected: classes.append("sel")
-                    if enabled:
-                        if st.button(str(day), key=f"kcal_{d.isoformat()}"): selected = d
+                    is_sel = (d == selected)
+                    is_today = (d == today)
+
+                    if enabled and not is_sel:
+                        if st.button(str(day), key=f"kcal_{d.isoformat()}"):
+                            selected = d
                     else:
-                        classes.append("dim")
-                        st.markdown(f'<div class="{" ".join(classes)}">{day}</div>', unsafe_allow_html=True)
+                        cls = "pill "
+                        cls += "sel " if is_sel else "dim " if not enabled else ""
+                        cls += "today " if is_today else ""
+                        st.markdown(f'<span class="{cls.strip()}">{day}</span>', unsafe_allow_html=True)
                     day += 1
                 else:
-                    st.markdown('<div class="cal-day dim">&nbsp;</div>', unsafe_allow_html=True)
+                    st.markdown('<span class="pill dim">&nbsp;</span>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
     return selected
 
 # ---------- Booking ----------
@@ -531,12 +565,14 @@ def booking_page():
     selected_date = st.session_state["picked_date"]
 
     if selected_date.strftime("%A") not in user.get("available_days", []):
-        with right: st.info("Choose a working day (enabled dates) to see available times.")
+        with right:
+            st.info("Choose a working day (enabled dates) to see available times.")
         return
 
     token = get_access_token_for_user_doc(user)
     if not token:
-        with right: st.error("The host hasn't connected their Outlook calendar (or the connection expired).")
+        with right:
+            st.error("The host hasn't connected their Outlook calendar (or the connection expired).")
         return
 
     start_local_day = dt.datetime.combine(selected_date, dt.time(0,0,0, tzinfo=tz))
@@ -581,7 +617,8 @@ def booking_page():
     with right:
         st.markdown(f"### {selected_date.strftime('%A, %B %d')}")
         if not slots:
-            st.info("No available time slots for this day."); return
+            st.info("No available time slots for this day.")
+            return
 
         cols = st.columns(3)
         chosen_key = "selected_slot_time"
@@ -610,12 +647,14 @@ def booking_page():
             st.markdown('</div>', unsafe_allow_html=True)
             if confirm:
                 if not (name.strip() and email.strip() and chosen_time):
-                    st.error("Please pick a time and enter your name & email."); return
+                    st.error("Please pick a time and enter your name & email.")
+                    return
                 start_dt_local = dt.datetime.combine(selected_date, chosen_time, tzinfo=tz)
                 end_dt_local = start_dt_local + dt.timedelta(minutes=meet_min)
 
                 if not is_interval_free(token, start_dt_local, end_dt_local, tzname):
-                    st.error("Someone just booked this slot. Please pick another time."); st.rerun()
+                    st.error("Someone just booked this slot. Please pick another time.")
+                    st.rerun()
 
                 agenda_snip = (agenda.strip()[:80] + "…") if agenda and len(agenda.strip()) > 80 else (agenda.strip() if agenda else "")
                 subject = f"Meeting with {name}" + (f" — {agenda_snip}" if agenda_snip else "")
@@ -631,9 +670,11 @@ def booking_page():
                 """
                 ok, _ = graph_create_event(token, subject, body, start_dt_local, end_dt_local, [email.strip()], tzname)
                 if ok:
-                    st.success(f"Meeting booked! Invite sent to {email.strip()}."); st.balloons()
+                    st.success(f"Meeting booked! Invite sent to {email.strip()}.")
+                    st.balloons()
                 else:
-                    st.error("That time is no longer available. Please choose another slot."); st.rerun()
+                    st.error("That time is no longer available. Please choose another slot.")
+                    st.rerun()
 
 # ---------- Sign-in ----------
 def signin_page():
