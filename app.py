@@ -1,5 +1,5 @@
-# Kandor Schedulify — Outlook sign-in, inline month calendar, agenda, no-double-booking
-# -------------------------------------------------------------------------------------
+# Kandor Schedulify — mobile-polished (light theme, top-right signout, responsive calendar)
+# ----------------------------------------------------------------------------------------
 # ENV: MONGO_URI, MONGO_DB_NAME (opt), MS_CLIENT_ID, MS_CLIENT_SECRET,
 #      MS_AUTHORITY, MS_REDIRECT_URI, BASE_URL, LOGO_PATH (opt)
 # Run: streamlit run app.py
@@ -23,13 +23,81 @@ import msal
 
 # ---------- Page ----------
 st.set_page_config(page_title="Kandor Schedulify", page_icon="🗓️", layout="wide")
-EXTRA_CSS = """
+
+# ---------- Hard-force LIGHT theme & mobile layout fixes ----------
+st.markdown("""
 <style>
-/* Add padding so your hero/topbar clears the Streamlit Cloud header */
-.block-container { padding-top: 4rem !important; }
+:root { color-scheme: light !important; }
+html, body, .stApp { background:#ffffff !important; color:#111827 !important; }
+
+/* Reduce the Streamlit top padding so UI isn't hidden under Streamlit Cloud header */
+.block-container { padding-top: 20px !important; padding-bottom: 20px !important; }
+
+/* Top bar: logo + title left, Sign out pinned to the right */
+.topbar { display:flex; align-items:center; justify-content:space-between;
+          gap:12px; padding:6px 4px 0 4px; }
+.topbar-left { display:flex; align-items:center; gap:10px; min-width:0; }
+.appname { font-weight:800; letter-spacing:-0.02em; font-size:20px; white-space:nowrap; }
+.topbar-actions { margin-left:auto; display:flex; align-items:center; }
+
+/* Make every Streamlit button a tidy pill */
+.stButton > button {
+  border-radius: 999px !important;
+  border: 1px solid #E5E7EB !important;
+  background:#f8fafc !important;
+  color:#111827 !important;
+  padding: 8px 16px !important;
+}
+.stButton > button:hover { background:#eef2ff !important; border-color:#c7ccff !important; }
+
+/* ---- Booking calendar ---- */
+.cal-wrap { margin-top: 6px; }
+.cal-navrow { display:grid; grid-template-columns: 42px 1fr 42px; gap:10px; align-items:center; }
+.cal-navbtn { border:1px solid #E5E7EB; background:#F8FAFC; border-radius:999px; padding:10px 0; text-align:center; font-weight:700; }
+.cal-month { text-align:center; font-weight:800; font-size:1.05rem; }
+
+/* Day-of-week header and grid share the same 7-col grid */
+.cal-dow, .cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:8px; }
+.cal-dow div { text-align:center; font-size:12px; color:#6B7280; padding:2px 0; }
+
+/* Day cell */
+.cal-day { text-align:center; padding:10px 0; border-radius: 999px;
+           border:1px solid #E5E7EB; background:#ffffff; color:#111827; user-select:none; }
+.cal-day.today { border-color:#c7ccff; background:#f5f7ff; }
+.cal-day.sel { background:#4f46e5; color:#ffffff; border-color:#4f46e5; }
+.cal-day.dim { color:#9CA3AF; background:#F9FAFB; border-color:#F1F5F9; }
+.cal-day.btn { cursor:pointer; }
+.cal-day.btn:hover { border-color:#9aa2ff; background:#eef2ff; }
+
+/* Slots column pills inherit Streamlit button style; make them denser on phones */
+@media (max-width: 600px){
+  .stButton > button { padding: 8px 12px !important; }
+}
+
+/* Prevent Streamlit's column min-width from breaking 7-col grids on mobile */
+.cal-scope [data-testid="column"] { min-width: 0 !important; flex: 1 1 0 !important; padding: 0 4px !important; }
+
+/* Cards (how-to etc.) sit on white like desktop */
+.howto-card{ background:#fff; border:1px solid rgba(0,0,0,.06); border-radius:14px; padding:14px 16px; box-shadow:0 4px 14px rgba(0,0,0,.04); }
+
+/* Booking link card */
+.link-card {
+  display:flex; align-items:center; gap:10px; padding:12px 14px;
+  border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc;
+}
+.link-card input { border:none; background:transparent; outline:none; width:100%;
+  font-family: ui-monospace, Menlo, monospace; font-size:14px; color:#111827; }
+.link-card button{
+  padding:10px 16px; border-radius:999px; border:none; color:#fff; font-weight:800; letter-spacing:.2px; cursor:pointer;
+  background:linear-gradient(90deg,#6366f1 0%, #a855f7 100%);
+  box-shadow:0 8px 18px rgba(99,102,241,.25);
+}
+.link-card button:hover{ filter:brightness(1.05); }
+
+/* Ensure Streamlit dark header overlay never tints our pages */
+[data-testid="stHeader"] { background:transparent !important; }
 </style>
-"""
-st.markdown(EXTRA_CSS, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # ---------- ENV ----------
 load_dotenv()
@@ -44,7 +112,7 @@ LOGO_PATH = os.getenv("LOGO_PATH", "assets/kandor-logo.png")
 MS_SCOPE = ["User.Read", "Calendars.ReadWrite", "Mail.Send"]
 GRAPH = "https://graph.microsoft.com/v1.0"
 
-# ---------- Slot policy ----------
+# ---------- Policy ----------
 BUSY_STATUSES = {"busy", "oof", "workingelsewhere", "tentative"}
 MIN_LEAD_MINUTES = 5
 RECHECK_EACH_SLOT = True
@@ -52,18 +120,14 @@ RECHECK_EACH_SLOT = True
 # ---------- Mongo ----------
 @st.cache_resource
 def _mongo():
-    client = MongoClient(MONGO_URI)
-    client.admin.command("ping")
-    return client
+    client = MongoClient(MONGO_URI); client.admin.command("ping"); return client
 
 def _db():
     c = _mongo()
-    if MONGO_DB_NAME:
-        return c[MONGO_DB_NAME]
+    if MONGO_DB_NAME: return c[MONGO_DB_NAME]
     try:
         d = c.get_default_database()
-        if d is not None:
-            return d
+        if d is not None: return d
     except ConfigurationError:
         pass
     return c["schedulify"]
@@ -92,17 +156,13 @@ def build_msal_app(msal_cache: Optional[msal.SerializableTokenCache] = None):
     )
 
 def persist_cache_for_user(user_key: dict, cache):
-    changed = True
     try:
-        attr = getattr(cache, "has_state_changed", None)
-        if attr is not None: changed = bool(attr)
+        changed = cache.has_state_changed  # type: ignore[attr-defined]
     except Exception:
         changed = True
     if changed:
-        try:
-            users_col().update_one(user_key, {"$set": {"msal_cache": cache.serialize()}})
-        except Exception:
-            pass
+        try: users_col().update_one(user_key, {"$set": {"msal_cache": cache.serialize()}})
+        except Exception: pass
 
 def create_auth_url():
     app = build_msal_app()
@@ -112,11 +172,9 @@ def create_auth_url():
 
 def finish_auth_redirect():
     state = st.query_params.get("state"); code = st.query_params.get("code")
-    if not state or not code:
-        st.error("Missing authorization response parameters."); return
+    if not state or not code: st.error("Missing authorization response parameters."); return
     doc = flows_col().find_one({"_id": state})
-    if not doc:
-        st.error("Sign-in session expired. Please try again."); return
+    if not doc: st.error("Sign-in session expired. Please try again."); return
     flow = doc["flow"]
 
     cache = msal.SerializableTokenCache()
@@ -135,39 +193,30 @@ def finish_auth_redirect():
     oid = claims.get("oid") or claims.get("sub")
     email = claims.get("preferred_username") or ""
     name = claims.get("name") or (email.split("@")[0] if email else "User")
-    if not oid:
-        st.error("Missing Microsoft account ID (oid)."); return
+    if not oid: st.error("Missing Microsoft account ID (oid)."); return
 
     u = users_col().find_one({"oid": oid})
     if not u:
-        base_slug = slugify_email(email, name)
-        slug = ensure_unique_slug(base_slug, oid)
+        base_slug = slugify_email(email, name); slug = ensure_unique_slug(base_slug, oid)
         users_col().insert_one({
             "oid": oid, "email": email, "name": name, "slug": slug,
-            "zoom_link": "",
-            "meeting_duration": 30,
+            "zoom_link": "", "meeting_duration": 30,
             "available_days": ["Monday","Tuesday","Wednesday","Thursday","Friday"],
-            "start_time": "09:00", "end_time": "17:00",
-            "timezone": "Asia/Kolkata",
+            "start_time": "09:00", "end_time": "17:00", "timezone": "Asia/Kolkata",
         })
     else:
         slug = u.get("slug") or ensure_unique_slug(slugify_email(u.get("email",""), u.get("name","user")), oid)
-        users_col().update_one({"oid": oid}, {"$set": {
-            "slug": slug,
-            "email": email or u.get("email",""),
-            "name": name or u.get("name",""),
-        }})
+        users_col().update_one({"oid": oid}, {"$set": {"slug": slug, "email": email or u.get("email",""), "name": name or u.get("name","")}})
 
     users_col().update_one({"oid": oid}, {"$set": {"msal_cache": cache.serialize()}})
     st.session_state["oid"] = oid
     st.success("Signed in with Outlook!")
-    time.sleep(0.5)
+    time.sleep(0.4)
     st.query_params.clear(); st.query_params["page"] = "dashboard"; st.rerun()
 
 def get_user_by_slug_or_email(value: str):
     u = users_col().find_one({"slug": value})
-    if not u and "@" in value:
-        u = users_col().find_one({"email": value})
+    if not u and "@" in value: u = users_col().find_one({"email": value})
     return u
 
 def get_access_token_for_user_doc(user_doc) -> Optional[str]:
@@ -178,9 +227,7 @@ def get_access_token_for_user_doc(user_doc) -> Optional[str]:
         except Exception: pass
     app = build_msal_app(cache)
     accounts = app.get_accounts()
-    token_result = None
-    if accounts:
-        token_result = app.acquire_token_silent(MS_SCOPE, account=accounts[0])
+    token_result = app.acquire_token_silent(MS_SCOPE, account=accounts[0]) if accounts else None
     if token_result and "access_token" in token_result:
         persist_cache_for_user({"oid": user_doc["oid"]}, cache)
         return token_result["access_token"]
@@ -188,250 +235,98 @@ def get_access_token_for_user_doc(user_doc) -> Optional[str]:
 
 # ---------- Graph ----------
 def graph_headers(token: str, tzname: Optional[str] = None):
-    headers = {"Authorization": f"Bearer {token}"}
-    headers["Prefer"] = f'outlook.timezone="{tzname or "UTC"}"'
-    return headers
+    h = {"Authorization": f"Bearer {token}"}; h["Prefer"] = f'outlook.timezone="{tzname or "UTC"}"'; return h
 
 def graph_day_view(token: str, start_utc: dt.datetime, end_utc: dt.datetime, tzname: str) -> List[dict]:
-    params = {
-        "startDateTime": start_utc.isoformat(),
-        "endDateTime": end_utc.isoformat(),
-        "$select": "subject,start,end,showAs,isCancelled",
-        "$orderby": "start/dateTime ASC"
-    }
-    r = requests.get(f"{GRAPH}/me/calendarView",
-                     headers=graph_headers(token, tzname),
-                     params=params, timeout=20)
-    if r.status_code == 200:
-        return r.json().get("value", [])
+    params = {"startDateTime": start_utc.isoformat(), "endDateTime": end_utc.isoformat(),
+              "$select": "subject,start,end,showAs,isCancelled", "$orderby": "start/dateTime ASC"}
+    r = requests.get(f"{GRAPH}/me/calendarView", headers=graph_headers(token, tzname), params=params, timeout=20)
+    if r.status_code == 200: return r.json().get("value", [])
     st.warning(f"Graph calendarView failed ({r.status_code}). Treating day as free."); return []
 
 def is_interval_free(token: str, start_local: dt.datetime, end_local: dt.datetime, tzname: str) -> bool:
     start_utc = start_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
     end_utc   = end_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
-    events = graph_day_view(token, start_utc, end_utc, tzname)
-    for ev in events:
-        if ev.get("isCancelled"):
-            continue
-        show_as = (ev.get("showAs") or "busy").lower()
-        if show_as in {"busy", "oof", "workingelsewhere", "tentative"}:
-            return False
+    for ev in graph_day_view(token, start_utc, end_utc, tzname):
+        if ev.get("isCancelled"): continue
+        if (ev.get("showAs") or "busy").lower() in BUSY_STATUSES: return False
     return True
 
 def graph_create_event(token: str, subject: str, html_body: str,
                        start_local: dt.datetime, end_local: dt.datetime,
-                       attendees: List[str], timezone_name: str) -> Tuple[bool, Optional[dict]]:
+                       attendees: List[str], timezone_name: str):
     payload = {
-        "subject": subject,
-        "showAs": "busy",
-        "transactionId": str(uuid.uuid4()),
+        "subject": subject, "showAs": "busy", "transactionId": str(uuid.uuid4()),
         "body": {"contentType": "HTML", "content": html_body},
         "start": {"dateTime": start_local.isoformat(), "timeZone": timezone_name},
         "end": {"dateTime": end_local.isoformat(), "timeZone": timezone_name},
         "attendees": [{"emailAddress": {"address": e}, "type": "required"} for e in attendees]
     }
-    r = requests.post(f"{GRAPH}/me/events",
-                      headers=graph_headers(token, timezone_name),
-                      json=payload, timeout=20)
-    if r.status_code in (201, 200):
-        return True, r.json()
-    return False, {"status": r.status_code, "text": r.text}
+    r = requests.post(f"{GRAPH}/me/events", headers=graph_headers(token, timezone_name), json=payload, timeout=20)
+    return (r.status_code in (200, 201), (r.json() if r.headers.get("content-type","").startswith("application/json") else {}))
 
 def graph_send_mail(token: str, to_addr: str, subject: str, html_body: str, tzname: str) -> bool:
     url = f"{GRAPH}/me/sendMail"
-    payload = {
-        "message": {
-            "subject": subject,
-            "body": {"contentType": "HTML", "content": html_body},
-            "toRecipients": [{"emailAddress": {"address": to_addr}}],
-        },
-        "saveToSentItems": True
-    }
+    payload = {"message": {"subject": subject, "body": {"contentType": "HTML", "content": html_body},
+                           "toRecipients": [{"emailAddress": {"address": to_addr}}]}, "saveToSentItems": True}
     r = requests.post(url, headers=graph_headers(token, tzname), json=payload, timeout=20)
     return r.status_code in (202, 200)
 
-# ---------- Slot math (no buffer) ----------
+# ---------- Slot math ----------
 def overlap(a_start: dt.time, a_end: dt.time, b_start: dt.time, b_end: dt.time) -> bool:
     return max(a_start, b_start) < min(a_end, b_end)
 
 def build_slots(day: dt.date, work_start: dt.time, work_end: dt.time,
                 meeting_minutes: int, busy: List[Tuple[dt.time, dt.time]]) -> List[dt.time]:
     step = dt.timedelta(minutes=meeting_minutes)
-    t = dt.datetime.combine(day, work_start)
-    end = dt.datetime.combine(day, work_end)
-    result = []
+    t = dt.datetime.combine(day, work_start); end = dt.datetime.combine(day, work_end)
+    out = []
     while t + step <= end:
         s = t.time(); e = (t + step).time()
-        if not any(overlap(s, e, bs, be) for bs, be in busy):
-            result.append(s)
+        if not any(overlap(s, e, bs, be) for bs, be in busy): out.append(s)
         t += step
-    return result
-
-# ---------- CSS (colorful calendar & buttons) ----------
-st.markdown("""
-<style>
-.block-container { padding-top: 1.1rem; padding-bottom: 2rem; }
-.topbar { display:flex; align-items:center; justify-content:space-between; padding:8px 6px 0 6px; }
-.topbar-left { display:flex; align-items:center; gap:10px; }
-.appname { font-weight:800; letter-spacing:-0.02em; font-size:20px; }
-
-/* Global button style (soft gradient pills) */
-.stButton > button {
-  border-radius: 999px !important;
-  border: 1px solid #cfd4ff !important;
-  background: linear-gradient(180deg,#ffffff 0%,#f4f6ff 100%) !important;
-  color: #1f2544 !important;
-  box-shadow: 0 2px 6px rgba(80, 90, 230, .06) !important;
-}
-.stButton > button:hover {
-  border-color: #8e96ff !important;
-  box-shadow: 0 6px 16px rgba(80, 90, 230, .18) !important;
-}
-
-/* Calendar */
-.cal-header { display:flex; align-items:center; justify-content:space-between; margin: 6px 0 10px 0; }
-.cal-title { font-weight: 700; }
-.cal-grid { display:grid; grid-template-columns: repeat(7, minmax(36px,1fr)); gap:10px; }
-.cal-dow { text-align:center; font-size: 12px; color:#6b7280; }
-.cal-day {
-  text-align:center; padding:12px 0; border-radius: 999px;
-  border:1px solid #e6e9ff; background: #fbfcff; color:#3a3f6b;
-}
-.cal-day.today {
-  background: linear-gradient(180deg,#eef3ff 0%, #f5f7ff 100%);
-  border-color:#b9c2ff;
-}
-.cal-day.sel {
-  background: linear-gradient(180deg,#6a5cff 0%, #8c7bff 100%);
-  color:white; border-color:#6a5cff;
-  box-shadow: 0 6px 16px rgba(106,92,255,.28);
-}
-.cal-day.dim { color:#a3a3a3; border-color:#f1f5f9; background:#fafbff; opacity:.65; }
-.cal-nav { min-width:44px; }
-
-/* Time-slot buttons (right column) inherit global pill styling; bump font-weight a bit */
-div[data-testid="stVerticalBlock"] .stButton > button { font-weight: 700 !important; }
-
-/* Booking link pill */
-.link-card {
-  display:flex; align-items:center; gap:10px; padding:12px 14px;
-  border-radius:999px; border:1px solid #cfd4ff;
-  background:linear-gradient(135deg,#edf1ff 0%, #f8faff 100%);
-  box-shadow:0 8px 22px rgba(16,24,40,.08);
-}
-.link-card input {
-  border:none; background:transparent; outline:none; width:100%;
-  font-family: ui-monospace, Menlo, monospace;
-  font-size:14px; color:#1f2544;
-}
-..link-card button{
-  padding:10px 16px;
-  border-radius:999px;
-  border:none;
-  color:#fff;
-  font-weight:800;
-  letter-spacing:.2px;
-  cursor:pointer;
-  background:linear-gradient(90deg,#6366f1 0%, #a855f7 100%); /* indigo → fuchsia */
-  box-shadow:0 8px 18px rgba(99,102,241,.25);
-  transition:transform .08s ease, box-shadow .15s ease, filter .15s ease;
-}
-.link-card button:hover{
-  filter:brightness(1.05);
-  box-shadow:0 10px 22px rgba(99,102,241,.32);
-}
-.link-card button:active{
-  transform:translateY(1px) scale(.99);
-}
-</style>
-""", unsafe_allow_html=True)
-
-HOWTO_CSS = """
-<style>
-.howto-grid{
-  display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap:16px;
-  margin-top:18px;
-}
-.howto-card{
-  background:#ffffff;
-  border:1px solid rgba(0,0,0,.06);
-  border-radius:14px;
-  padding:14px 16px;
-  box-shadow:0 4px 14px rgba(0,0,0,.04);
-}
-.howto-card h4{ margin:.2rem 0 .25rem; font-size:1rem; }
-.howto-emoji{ font-size:22px; margin-right:8px; }
-</style>
-"""
-st.markdown(HOWTO_CSS, unsafe_allow_html=True)
+    return out
 
 # ---------- Header ----------
 def topbar():
     c1, c2 = st.columns([7, 5])
     with c1:
         st.markdown('<div class="topbar"><div class="topbar-left">', unsafe_allow_html=True)
-        if os.path.exists(LOGO_PATH):
-            st.image(LOGO_PATH, width=34)
-        st.markdown('<div class="appname">Kandor Schedulify</div></div></div>', unsafe_allow_html=True)
+        if os.path.exists(LOGO_PATH): st.image(LOGO_PATH, width=32)
+        st.markdown('<div class="appname">Kandor Schedulify</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="topbar-actions">', unsafe_allow_html=True)
+        st.markdown('</div></div>', unsafe_allow_html=True)
     with c2:
-        r1, r2 = st.columns([4,1])
-        with r2:
-            if "oid" in st.session_state:
-                if st.button("Sign out", type="primary"):
-                    st.session_state.pop("oid", None)
-                    st.success("Signed out."); time.sleep(0.3)
-                    st.query_params.clear(); st.rerun()
+        right = st.container()
+        with right:
+            r1, r2 = st.columns([4,1])
+            with r2:
+                if "oid" in st.session_state:
+                    if st.button("Sign out", key="signout_btn"):
+                        st.session_state.pop("oid", None)
+                        st.success("Signed out.")
+                        time.sleep(0.3)
+                        st.query_params.clear(); st.rerun()
 
 # ---------- Landing ----------
 def landing():
     topbar()
-    st.markdown(
-        """
-        <div class="hero">
-          <h3>Your Personal Calendly Clone by Kandor</h3>
-          <p>Sign in with your Outlook account, set your availability, and share a simple booking link.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("### Your Personal Calendly Clone by Kandor")
+    st.caption("Sign in with your Outlook account, set availability, and share a simple booking link.")
     if st.button("Sign in with Outlook", type="primary", use_container_width=True):
-        st.query_params["page"] = "signin"
-        st.rerun()
+        st.query_params["page"] = "signin"; st.rerun()
 
+    # simple how-to on white cards (unchanged logic)
     st.markdown("#### How to use Kandor Schedulify")
-    st.markdown(
-        """
-        <div class="howto-grid">
-          <div class="howto-card">
-            <div><span class="howto-emoji">🔐</span><b>Sign in with Outlook</b></div>
-            <p>Connect securely via Microsoft and grant <i>Calendars.ReadWrite</i> & <i>Mail.Send</i>.</p>
-          </div>
-          <div class="howto-card">
-            <div><span class="howto-emoji">⚙️</span><b>Configure settings</b></div>
-            <p>Set meeting duration, working days/hours, time zone, and your video link on the Dashboard.</p>
-          </div>
-          <div class="howto-card">
-            <div><span class="howto-emoji">🔗</span><b>Share your booking link</b></div>
-            <p>Copy the personal link from the Dashboard and send it to clients.</p>
-          </div>
-          <div class="howto-card">
-            <div><span class="howto-emoji">📅</span><b>Clients pick a slot</b></div>
-            <p>We show <b>only open</b> times from your Outlook calendar in their time zone—no double booking.</p>
-          </div>
-          <div class="howto-card">
-            <div><span class="howto-emoji">✉️</span><b>Automatic invites</b></div>
-            <p>Both attendees receive a calendar invite. You also get a confirmation email with the guest’s details.</p>
-          </div>
-          <div class="howto-card">
-            <div><span class="howto-emoji">🛠️</span><b>Manage in Outlook</b></div>
-            <p>Reschedule/cancel directly in Outlook. Update your settings anytime in the Dashboard.</p>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    cols = st.columns(2)
+    with cols[0]:
+        st.markdown('<div class="howto-card">🔐 <b>Sign in with Outlook</b><br/>Grant Calendars.ReadWrite & Mail.Send.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="howto-card">🔗 <b>Share your booking link</b><br/>Copy from the Dashboard.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="howto-card">✉️ <b>Automatic invites</b><br/>Guests+you get an invite & you get an email.</div>', unsafe_allow_html=True)
+    with cols[1]:
+        st.markdown('<div class="howto-card">⚙️ <b>Configure settings</b><br/>Duration, working hours/days, time zone, video link.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="howto-card">📅 <b>Clients pick a slot</b><br/>We show only open times—no double booking.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="howto-card">🛠️ <b>Manage in Outlook</b><br/>Reschedule/cancel in Outlook anytime.</div>', unsafe_allow_html=True)
 
 # ---------- Dashboard ----------
 def dashboard():
@@ -445,21 +340,19 @@ def dashboard():
 
     user = users_col().find_one({"oid": st.session_state["oid"]})
     if not user:
-        st.error("User session lost. Please sign in again.")
-        st.session_state.pop("oid", None); return
+        st.error("User session lost. Please sign in again."); st.session_state.pop("oid", None); return
 
     st.success(f"Welcome, **{user.get('name','User')}** 👋")
     col1, col2, col3 = st.columns(3, gap="large")
 
     with col1:
         st.markdown("##### Calendar Connection")
-        token_test = get_access_token_for_user_doc(user)
-        st.markdown('✅ Outlook Calendar Connected' if token_test else '❌ Not connected. Click “Sign in with Outlook”.')
+        st.markdown('✅ Outlook Calendar Connected' if get_access_token_for_user_doc(user)
+                    else '❌ Not connected. Click “Sign in with Outlook”.')
 
     with col2:
         st.markdown("##### Your Booking Link")
-        slug = user.get("slug", "unknown")
-        booking_url = f"{BASE_URL}/?page=book&user={slug}"
+        slug = user.get("slug", "unknown"); booking_url = f"{BASE_URL}/?page=book&user={slug}"
         st_html(f"""
             <div class="link-card">
               <input id="k-copy-input" value="{booking_url}" readonly />
@@ -471,9 +364,7 @@ def dashboard():
               if (btn && inp) {{
                 btn.addEventListener('click', () => {{
                   inp.select(); inp.setSelectionRange(0, 99999);
-                  try {{ navigator.clipboard.writeText(inp.value); }} catch (e) {{
-                    document.execCommand('copy');
-                  }}
+                  try {{ navigator.clipboard.writeText(inp.value); }} catch (e) {{ document.execCommand('copy'); }}
                 }});
               }}
             </script>
@@ -481,13 +372,10 @@ def dashboard():
 
     with col3:
         st.markdown("##### Quick Stats")
-        mdur = user.get("meeting_duration", 30)
-        wdays = len(user.get("available_days", []))
-        st.write(f"**Meeting Duration:** {mdur} min")
-        st.write(f"**Working Days:** {wdays} days")
+        st.write(f"**Meeting Duration:** {user.get('meeting_duration', 30)} min")
+        st.write(f"**Working Days:** {len(user.get('available_days', []))} days")
 
     st.divider()
-
     with st.form("settings"):
         st.markdown("#### Meeting Settings")
         c1, c2 = st.columns(2)
@@ -502,99 +390,99 @@ def dashboard():
         avail_days = st.multiselect("Working Days", options=days, default=user.get("available_days", days[:5]))
 
         user_tz = user.get("timezone", "Asia/Kolkata")
-        common_tz = [
-            "UTC","Asia/Kolkata","Asia/Dubai","Asia/Singapore","Asia/Tokyo",
-            "Europe/London","Europe/Berlin","Europe/Paris",
-            "America/Los_Angeles","America/New_York","America/Chicago","America/Toronto",
-            "Australia/Sydney","Africa/Johannesburg",
-        ]
+        common_tz = ["UTC","Asia/Kolkata","Asia/Dubai","Asia/Singapore","Asia/Tokyo",
+                     "Europe/London","Europe/Berlin","Europe/Paris",
+                     "America/Los_Angeles","America/New_York","America/Chicago","America/Toronto",
+                     "Australia/Sydney","Africa/Johannesburg"]
         if user_tz not in common_tz: common_tz.insert(0, user_tz)
         tz = st.selectbox("Time Zone", options=common_tz, index=common_tz.index(user_tz))
 
         t1, t2 = st.columns(2)
         with t1:
-            start_str = user.get("start_time", "09:00")
-            start_val = dt.datetime.strptime(start_str, "%H:%M").time()
+            start_val = dt.datetime.strptime(user.get("start_time", "09:00"), "%H:%M").time()
             start_time = st.time_input("Work Day Starts At", value=start_val)
         with t2:
-            end_str = user.get("end_time", "17:00")
-            end_val = dt.datetime.strptime(end_str, "%H:%M").time()
+            end_val = dt.datetime.strptime(user.get("end_time", "17:00"), "%H:%M").time()
             end_time = st.time_input("Work Day Ends At", value=end_val)
 
         if st.form_submit_button("Save Settings", type="primary"):
             users_col().update_one({"oid": user["oid"]}, {"$set": {
-                "zoom_link": video_link,
-                "meeting_duration": int(dur),
-                "available_days": avail_days,
-                "start_time": start_time.strftime("%H:%M"),
-                "end_time": end_time.strftime("%H:%M"),
-                "timezone": tz,
+                "zoom_link": video_link, "meeting_duration": int(dur),
+                "available_days": avail_days, "start_time": start_time.strftime("%H:%M"),
+                "end_time": end_time.strftime("%H:%M"), "timezone": tz,
             }})
             st.success("Settings saved!"); st.rerun()
 
-# ---------- Month Calendar ----------
-def _month_start(d: dt.date) -> dt.date:
-    return d.replace(day=1)
-
-def _next_month(d: dt.date) -> dt.date:
-    y, m = d.year, d.month
-    return dt.date(y+1, 1, 1) if m == 12 else dt.date(y, m+1, 1)
-
-def _prev_month(d: dt.date) -> dt.date:
-    y, m = d.year, d.month
-    return dt.date(y-1, 12, 1) if m == 1 else dt.date(y, m-1, 1)
+# ---------- Month Calendar (responsive) ----------
+def _month_start(d: dt.date) -> dt.date: return d.replace(day=1)
+def _next_month(d: dt.date) -> dt.date: return dt.date(d.year+1,1,1) if d.month==12 else dt.date(d.year, d.month+1, 1)
+def _prev_month(d: dt.date) -> dt.date: return dt.date(d.year-1,12,1) if d.month==1 else dt.date(d.year, d.month-1, 1)
 
 def calendar_widget(selected: dt.date, working_days: List[str]) -> dt.date:
-    key_prefix = "kcal_"
+    """Pure-Streamlit (but mobile-safe) grid using HTML + query params for clicks."""
     if "k_view_month" not in st.session_state:
-        st.session_state["k_view_month"] = _month_start(selected if selected else dt.date.today())
+        st.session_state["k_view_month"] = _month_start(selected or dt.date.today())
     view = st.session_state["k_view_month"]
 
-    c1, c2, c3 = st.columns([1, 5, 1])
-    with c1:
-        if st.button("‹", key=key_prefix+"prev", use_container_width=True):
-            st.session_state["k_view_month"] = _prev_month(view)
-            st.rerun()
-    with c2:
-        st.markdown(f'<div class="cal-header"><div class="cal-title">{view.strftime("%B %Y")}</div></div>', unsafe_allow_html=True)
-    with c3:
-        if st.button("›", key=key_prefix+"next", use_container_width=True):
-            st.session_state["k_view_month"] = _next_month(view)
-            st.rerun()
+    # Handle clicks from params
+    picked_param = st.query_params.get("pick")
+    nav = st.query_params.get("nav")
+    if nav == "prev":
+        st.session_state["k_view_month"] = _prev_month(view); st.query_params.pop("nav", None)
+        st.rerun()
+    elif nav == "next":
+        st.session_state["k_view_month"] = _next_month(view); st.query_params.pop("nav", None)
+        st.rerun()
+    if picked_param:
+        try:
+            selected = dt.date.fromisoformat(picked_param)
+        except Exception:
+            pass
+        finally:
+            st.query_params.pop("pick", None)
 
-    cols = st.columns(7)
-    for i, dow in enumerate(["SUN","MON","TUE","WED","THU","FRI","SAT"]):
-        with cols[i]:
-            st.markdown(f'<div class="cal-dow">{dow}</div>', unsafe_allow_html=True)
-
+    # Build month cells
     first_weekday, days_in_month = calendar.monthrange(view.year, view.month)
-    lead_blanks = (first_weekday + 1) % 7
-    day_counter = 1
+    lead_blank = (first_weekday + 1) % 7
     today = dt.date.today()
 
-    for _ in range(6):
-        row = st.columns(7)
-        for col_idx in range(7):
-            with row[col_idx]:
-                if lead_blanks > 0:
-                    lead_blanks -= 1
-                    st.markdown('<div class="cal-day dim">&nbsp;</div>', unsafe_allow_html=True)
-                elif day_counter <= days_in_month:
-                    d = dt.date(view.year, view.month, day_counter)
-                    classes = ["cal-day"]
-                    dayname = d.strftime("%A")
-                    enabled = dayname in working_days and d >= today
-                    if d == today: classes.append("today")
-                    if d == selected: classes.append("sel")
-                    if enabled:
-                        if st.button(str(day_counter), key=f"{key_prefix}{d.isoformat()}", use_container_width=True):
-                            selected = d
-                    else:
-                        classes.append("dim")
-                        st.markdown(f'<div class="{" ".join(classes)}">{day_counter}</div>', unsafe_allow_html=True)
-                    day_counter += 1
-                else:
-                    st.markdown('<div class="cal-day dim">&nbsp;</div>', unsafe_allow_html=True)
+    # Render
+    st.markdown('<div class="cal-wrap cal-scope">', unsafe_allow_html=True)
+    # nav row
+    st_html(f"""
+      <div class="cal-navrow">
+        <a class="cal-navbtn" href="?page=book&user={st.query_params.get('user','')}&nav=prev">‹</a>
+        <div class="cal-month">{view.strftime("%B %Y")}</div>
+        <a class="cal-navbtn" href="?page=book&user={st.query_params.get('user','')}&nav=next">›</a>
+      </div>
+    """, height=40)
+
+    # DOW header
+    st.markdown('<div class="cal-dow">' + ''.join(f'<div>{d}</div>' for d in ["SUN","MON","TUE","WED","THU","FRI","SAT"]) + '</div>',
+                unsafe_allow_html=True)
+
+    # Grid (42 cells)
+    cells = []
+    day_num = 1
+    for i in range(42):
+        if i < lead_blank or day_num > days_in_month:
+            cells.append('<div class="cal-day dim">&nbsp;</div>')
+        else:
+            d = dt.date(view.year, view.month, day_num)
+            classes = ["cal-day"]
+            if d == today: classes.append("today")
+            if d == selected: classes.append("sel")
+            enabled = d.strftime("%A") in working_days and d >= today
+            if enabled:
+                url = f'?page=book&user={st.query_params.get("user","")}&pick={d.isoformat()}'
+                cells.append(f'<a class="cal-day btn {" ".join(classes)}" href="{url}">{day_num}</a>')
+            else:
+                classes.append("dim")
+                cells.append(f'<div class="{" ".join(classes)}">{day_num}</div>')
+            day_num += 1
+
+    st.markdown('<div class="cal-grid">' + ''.join(cells) + '</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
     return selected
 
 # ---------- Booking ----------
@@ -603,14 +491,10 @@ def booking_page():
 
     slug_or_email = st.query_params.get("user", "")
     if not slug_or_email:
-        st.info("Add '?user=<slug>' to the URL, e.g., "
-                f"`{BASE_URL}/?page=book&user=navdeep`")
-        return
+        st.info(f"Add '?user=<slug>' to the URL, e.g., `{BASE_URL}/?page=book&user=navdeep`"); return
 
     user = get_user_by_slug_or_email(slug_or_email)
-    if not user:
-        st.error("This booking link is invalid.")
-        return
+    if not user: st.error("This booking link is invalid."); return
 
     left, middle, right = st.columns([1, 2, 1.3], gap="large")
 
@@ -619,8 +503,7 @@ def booking_page():
         st.markdown(f"### {user.get('name','Host')}")
         st.caption(f"{user.get('meeting_duration',30)} min")
 
-    tzname = user.get("timezone", "UTC")
-    tz = ZoneInfo(tzname)
+    tzname = user.get("timezone", "UTC"); tz = ZoneInfo(tzname)
 
     with middle:
         st.markdown("#### Select a Date & Time")
@@ -630,30 +513,25 @@ def booking_page():
         st.caption(f"Time zone: **{tzname}**")
 
     selected_date = st.session_state["picked_date"]
-
     if selected_date.strftime("%A") not in user.get("available_days", []):
-        with right:
-            st.info("Choose a working day (enabled dates) to see available times.")
+        with right: st.info("Choose a working day (enabled dates) to see available times.")
         return
 
     token = get_access_token_for_user_doc(user)
     if not token:
-        with right:
-            st.error("The host hasn't connected their Outlook calendar (or the connection expired).")
+        with right: st.error("The host hasn't connected their Outlook calendar (or the connection expired).")
         return
 
     start_local_day = dt.datetime.combine(selected_date, dt.time(0,0,0, tzinfo=tz))
     end_local_day   = dt.datetime.combine(selected_date, dt.time(23,59,59, tzinfo=tz))
     start_utc = start_local_day.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
     end_utc   = end_local_day.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
-
     events = graph_day_view(token, start_utc, end_utc, tzname)
 
     busy: List[Tuple[dt.time, dt.time]] = []
     for ev in events:
         if ev.get("isCancelled"): continue
-        show_as = (ev.get("showAs") or "busy").lower()
-        if show_as not in BUSY_STATUSES: continue
+        if (ev.get("showAs") or "busy").lower() not in BUSY_STATUSES: continue
         try:
             sdt = dt.datetime.fromisoformat(ev["start"]["dateTime"])
             edt = dt.datetime.fromisoformat(ev["end"]["dateTime"])
@@ -677,15 +555,13 @@ def booking_page():
         for t in slots:
             s_local = dt.datetime.combine(selected_date, t, tzinfo=tz)
             e_local = s_local + dt.timedelta(minutes=meet_min)
-            if is_interval_free(token, s_local, e_local, tzname):
-                filtered.append(t)
+            if is_interval_free(token, s_local, e_local, tzname): filtered.append(t)
         slots = filtered
 
     with right:
         st.markdown(f"#### {selected_date.strftime('%A, %B %d')}")
         if not slots:
-            st.info("No available time slots for this day.")
-            return
+            st.info("No available time slots for this day."); return
 
         cols = st.columns(3)
         chosen_key = "selected_slot_time"
@@ -698,30 +574,25 @@ def booking_page():
         for i, t in enumerate(slots):
             with cols[i % 3]:
                 if st.button(pretty(t), key=f"slot_{t}", use_container_width=True):
-                    st.session_state[chosen_key] = t
-                    chosen_time = t
+                    st.session_state[chosen_key] = t; chosen_time = t
 
         st.markdown("---")
-        chosen_label = pretty(chosen_time) if chosen_time else "—"
-        st.write(f"**Selected time:** {chosen_label}")
+        st.write(f"**Selected time:** {pretty(chosen_time) if chosen_time else '—'}")
 
         with st.form("book"):
             name = st.text_input("Your Name")
             email = st.text_input("Your Email")
             agenda = st.text_area("Agenda / context (optional)", height=100)
-            confirm = st.form_submit_button("Confirm Booking", type="primary")
-            if confirm:
+            if st.form_submit_button("Confirm Booking", type="primary"):
                 if not (name.strip() and email.strip() and chosen_time):
-                    st.error("Please pick a time and enter your name & email.")
-                    return
+                    st.error("Please pick a time and enter your name & email."); return
                 start_dt_local = dt.datetime.combine(selected_date, chosen_time, tzinfo=tz)
                 end_dt_local = start_dt_local + dt.timedelta(minutes=meet_min)
 
                 if not is_interval_free(token, start_dt_local, end_dt_local, tzname):
-                    st.error("Someone just booked this slot. Please pick another time.")
-                    st.rerun()
+                    st.error("Someone just booked this slot. Please pick another time."); st.rerun()
 
-                agenda_snip = (agenda.strip()[:80] + "…") if agenda and len(agenda.strip()) > 80 else (agenda.strip() if agenda else "")
+                agenda_snip = (agenda.strip()[:80] + "…") if (agenda and len(agenda.strip()) > 80) else (agenda.strip() if agenda else "")
                 subject = f"Meeting with {name}" + (f" — {agenda_snip}" if agenda_snip else "")
                 body = f"""
                     <p>Meeting scheduled via Kandor Schedulify.</p>
@@ -730,14 +601,10 @@ def booking_page():
                       <li><b>When:</b> {start_dt_local.strftime("%A, %B %d %Y %I:%M %p")} ({tzname})</li>
                       <li><b>Duration:</b> {meet_min} minutes</li>
                       <li><b>Video link:</b> {user.get('zoom_link','N/A')}</li>
-                      {"<li><b>Agenda:</b> " + agenda.strip() + "</li>" if agenda.strip() else ""}
+                      {"<li><b>Agenda:</b> " + agenda.strip() + "</li>" if (agenda and agenda.strip()) else ""}
                     </ul>
                 """
-                ok, _ = graph_create_event(
-                    token, subject, body,
-                    start_dt_local, end_dt_local,
-                    [email.strip()], tzname
-                )
+                ok, _ = graph_create_event(token, subject, body, start_dt_local, end_dt_local, [email.strip()], tzname)
                 if ok:
                     host_email = user.get("email")
                     human_time = start_dt_local.strftime("%A, %B %d at %I:%M %p")
@@ -749,61 +616,41 @@ def booking_page():
                           <li><b>When:</b> {human_time} ({tzname})</li>
                           <li><b>Duration:</b> {meet_min} minutes</li>
                           <li><b>Video link:</b> {user.get('zoom_link','N/A')}</li>
-                          {"<li><b>Agenda:</b> " + agenda.strip() + "</li>" if agenda.strip() else ""}
+                          {"<li><b>Agenda:</b> " + agenda.strip() + "</li>" if (agenda and agenda.strip()) else ""}
                         </ul>
                     """
-                    if host_email:
-                        graph_send_mail(token, host_email, mail_subj, mail_body, tzname)
-                    st.success(f"Meeting booked! Invite sent to {email.strip()}.")
-                    st.balloons()
+                    if host_email: graph_send_mail(token, host_email, mail_subj, mail_body, tzname)
+                    st.success(f"Meeting booked! Invite sent to {email.strip()}."); st.balloons()
                 else:
-                    st.error("That time is no longer available. Please choose another slot.")
-                    st.caption("Tip: your page may be stale. I’ve refreshed the available times.")
-                    st.rerun()
+                    st.error("That time is no longer available. Please choose another slot."); st.rerun()
 
 # ---------- Sign-in ----------
 def signin_page():
     topbar()
     st.markdown("### Sign in with Outlook")
     st.write("You’ll be redirected to Microsoft to sign in.")
-
     auth_url = create_auth_url()
-
-    # Try to navigate the TOP window (not the Streamlit iframe).
-    st.markdown(
-        f"""
-        <script>
-          (function() {{
-            const url = "{auth_url}";
-            try {{
-              if (window.top && window.top !== window.self) {{
-                window.top.location.href = url;
-              }} else {{
-                window.location.assign(url);
-              }}
-            }} catch (e) {{
-              console.warn("Auto-redirect suppressed:", e);
-            }}
-          }})();
-        </script>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Visible fallback for browsers/pop-up blockers
+    st.markdown(f"""
+      <script>
+        (function(){{
+          const url="{auth_url}";
+          try {{
+            if (window.top && window.top !== window.self) {{ window.top.location.href = url; }}
+            else {{ window.location.assign(url); }}
+          }} catch(e){{}}
+        }})();
+      </script>
+    """, unsafe_allow_html=True)
     st.markdown(
         f'<a href="{auth_url}" target="_blank" rel="noopener" '
         'style="display:inline-block;padding:10px 16px;border-radius:8px;'
         'background:#4f46e5;color:#fff;text-decoration:none;font-weight:700;">'
-        'Continue with Microsoft</a>',
-        unsafe_allow_html=True,
-    )
+        'Continue with Microsoft</a>', unsafe_allow_html=True)
 
 # ---------- Router ----------
 def main():
     if "code" in st.query_params and "state" in st.query_params:
         finish_auth_redirect(); return
-
     page = st.query_params.get("page", "home")
     if page == "dashboard": dashboard()
     elif page == "book": booking_page()
